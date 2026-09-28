@@ -43,6 +43,54 @@ A USSD flow, the menu system people reach by dialling a code like `*123#`, that 
 
 In this prototype, payments come from a **simulated ledger of synthetic transactions**, not a real mobile money network. The point is to show the product flow working end to end, not to connect to a real operator.
 
+### Menu design
+
+![USSD menu flow](docs/ussd-menu-flow.png)
+
+Every screen fits within the 160-character USSD limit. The key design decisions:
+
+- **Never shows the balance**, to anyone
+- **Staff don't need the owner's phone or PIN**, and must accept an invitation before they can check payments
+- **Only checks the last 10 minutes**, matching the moment of sale
+- **Each payment can only be confirmed once**, so one customer's payment can't be claimed by another
+- **Shows the closest lower amount**, to catch customers who pay less than they claim
+- **Shows only the last 4 digits** of the sender's number, to protect customer privacy
+- **Every "not found" screen says what to do next**: don't hand over the goods
+
+## See it working
+
+Tested end to end on the Africa's Talking USSD sandbox simulator, with the app deployed on Render.
+
+| Payment received | Already confirmed | Customer paid less |
+| --- | --- | --- |
+| ![Payment received](docs/screenshots/01-payment-received.png) | ![Already confirmed](docs/screenshots/02-already-confirmed.png) | ![Underpayment](docs/screenshots/03-underpayment.png) |
+| Staff confirm a payment without seeing the balance | A second check of the same payment is flagged | The closest real payment is shown instead |
+
+| No payment found | Owner's staff list | Unregistered number |
+| --- | --- | --- |
+| ![No payment found](docs/screenshots/04-no-payment.png) | ![Staff list](docs/screenshots/05-staff-list.png) | ![Not linked](docs/screenshots/06-not-linked.png) |
+| Nothing in the last 10 minutes | Only the owner can manage staff | Unknown numbers get no access |
+
+## How it works
+
+When someone dials the code, Africa's Talking sends the app the session ID, phone number and everything typed so far. The app replies with text starting with `CON` (show a menu and wait) or `END` (show a final message and close). The whole flow lives in [`app.py`](app.py), and the core logic is in `check_payment()`.
+
+### Run it yourself
+
+```
+pip install -r requirements.txt
+pytest                 # 27 tests covering every screen
+python app.py
+```
+
+Then, in another terminal:
+
+```
+curl -X POST localhost:5000/ussd -d "phoneNumber=+260970000001&text=1*250"
+```
+
+Demo helpers: `POST /demo/pay` adds a test payment, `POST /demo/accept` accepts a staff invitation, and `POST /demo/reset` restores the starting data.
+
 ## Scope
 
 ### Version 1 (this repository)
@@ -50,8 +98,10 @@ In this prototype, payments come from a **simulated ledger of synthetic transact
 | Component | What it is | Status |
 | --- | --- | --- |
 | Spec and README | This document: problem, prior art, scope | ✅ Done |
-| USSD prototype | Merchant and staff check flow on the [Africa's Talking](https://africastalking.com) USSD sandbox, with a public link so anyone can try the menu | 🔜 Planned |
-| Simulated ledger | Synthetic payments the USSD flow checks against | 🔜 Planned |
+| USSD prototype | Merchant and staff check flow, deployed on Render and tested on the [Africa's Talking](https://africastalking.com) USSD sandbox | ✅ Done |
+| Simulated ledger | Synthetic payments the USSD flow checks against, reset on each restart | ✅ Done |
+| Tests | 27 automated tests, one for each screen and edge case | ✅ Done |
+| Web demo page | A clickable phone in the browser, so anyone can try the flow without an account | 🔜 Planned |
 | Dashboard | Public data on mobile money and merchant payment growth, showing why the problem matters | 🔜 Planned |
 
 ### Later versions
@@ -70,9 +120,9 @@ In this prototype, payments come from a **simulated ledger of synthetic transact
 
 ## How I'll know V1 works
 
-- Anyone can open the sandbox link and complete the check flow in **under 30 seconds**
-- The flow correctly returns both "received" and "not found" for test payments
-- Staff can check a payment **without** seeing the owner's balance
+- Anyone can open the web demo and complete the check flow in **under 30 seconds** (planned)
+- ✅ The flow correctly returns "received", "already confirmed", "paid less" and "not found" for test payments
+- ✅ Staff can check a payment **without** seeing the owner's balance
 - A reader with no background understands the problem and the demo from this README alone
 
 ## Responsible disclosure
@@ -88,6 +138,8 @@ This project describes the fraud pattern at a conceptual level only. It does not
 ## Limitations
 
 - This is a portfolio prototype, not a product. It shows a product idea working, not that it would succeed at scale
+- Payments are synthetic and stored in memory, so they reset whenever the app restarts, and there is one demo business
+- The sandbox simulator needs an Africa's Talking account, so the web demo page is how others will try it
 - A real version could only be built by a mobile money operator, since it needs live transaction data
 - My understanding of the problem comes from informal observation and published research, not a formal user study
 
